@@ -119,6 +119,13 @@ public class PlayerController : MonoBehaviour
 
     #endregion
 
+    #region Public Methods
 
+    public float GetPlayerVelocity()
+    {
+        return rb.velocity.x;
+    }
+
+    #endregion
 
 }
