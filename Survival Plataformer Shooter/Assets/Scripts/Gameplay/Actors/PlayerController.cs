@@ -1,11 +1,15 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+
 
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(CapsuleCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(AudioSource))]
 public class PlayerController : MonoBehaviour
 {
     #region Inspector
@@ -15,34 +19,47 @@ public class PlayerController : MonoBehaviour
     public float groundCheckDistance = 0.2f;
     public float jumpForce = 1f;
 
+    public GameObject bullet;
+    public float bulletSpeed = 1f;
+
+    public int maxHP = 100;
+
+    public Text hpText;
+
     #endregion
 
     #region Private Members
 
-    private SpriteRenderer sr;
-    private Animator anim;
-    private CapsuleCollider2D capsule;
-    private Rigidbody2D rb;
+    private SpriteRenderer _sr;
+    private Animator _anim;
+    private CapsuleCollider2D _capsule;
+    private Rigidbody2D _rb;
+    private AudioSource _audio;
 
     private float _horizontal;
     private float _vertical;
 
-    private bool flip = false;
-    private bool grounded = false;
-    private bool jump = false;
-    
+    private bool _flip = false;
+    private bool _grounded = false;
+    private bool _jump = false;
+    private bool _canShoot = true;
 
+    private int _currentHP;
     #endregion
 
     #region Monobehaviour Methods
     void Awake()
     {
 
-        sr = GetComponent<SpriteRenderer>();
-        anim = GetComponent<Animator>();
-        capsule = GetComponent<CapsuleCollider2D>();
-        rb = GetComponent<Rigidbody2D>();
-                
+        _sr = GetComponent<SpriteRenderer>();
+        _anim = GetComponent<Animator>();
+        _capsule = GetComponent<CapsuleCollider2D>();
+        _rb = GetComponent<Rigidbody2D>();
+        _audio = GetComponent<AudioSource>();
+
+        _currentHP = maxHP;
+        hpText.text = _currentHP.ToString();
+
     }
 
     void Update()
@@ -51,33 +68,40 @@ public class PlayerController : MonoBehaviour
         _vertical = Input.GetAxis("Vertical");
 
 
-        if (_horizontal < 0 && !flip)
+        if (_horizontal < 0 && !_flip)
         {
-            sr.flipX = true;
-            flip = true;
+            _sr.flipX = true;
+            _flip = true;
         }
-        else if (_horizontal > 0 && flip)
+        else if (_horizontal > 0 && _flip)
         {
-            sr.flipX = false;
-            flip = false;
+            _sr.flipX = false;
+            _flip = false;
         }
 
         if (Input.GetKey(KeyCode.Space))
-            anim.SetBool("Shooting", true);
+        {
+            _anim.SetBool("Shooting", true);
+
+            StartCoroutine(Shoot(0.2f));
+
+            
+        }
         else
-            anim.SetBool("Shooting", false);
+        {
+            _anim.SetBool("Shooting", false);
+
+        }
 
         Vector3 groundCheck = transform.position;
         groundCheck.y -= groundCheckDistance;
         Debug.DrawLine(transform.position, groundCheck, Color.red);
         
-        grounded = Physics2D.Linecast(transform.position, groundCheck, 1 << LayerMask.NameToLayer("Ground"));
+        _grounded = Physics2D.Linecast(transform.position, groundCheck, 1 << LayerMask.NameToLayer("Ground"));
 
-        Debug.Log(grounded);
-
-        if (Input.GetKeyDown(KeyCode.W) && grounded)
+        if (Input.GetKeyDown(KeyCode.W) && _grounded)
         {
-            jump = true;
+            _jump = true;
         }
 
     
@@ -86,35 +110,78 @@ public class PlayerController : MonoBehaviour
     void FixedUpdate()
     {
 
-        if (_horizontal * rb.velocity.x < maxSpeed)
-            rb.AddForce(Vector2.right * _horizontal * movementSpeed);
+        if (_horizontal * _rb.velocity.x < maxSpeed)
+            _rb.AddForce(Vector2.right * _horizontal * movementSpeed);
 
-        if (Mathf.Abs(rb.velocity.x) > maxSpeed)
-            rb.velocity = new Vector2(Mathf.Sign(rb.velocity.x) * maxSpeed, rb.velocity.y);
+        if (Mathf.Abs(_rb.velocity.x) > maxSpeed)
+            _rb.velocity = new Vector2(Mathf.Sign(_rb.velocity.x) * maxSpeed, _rb.velocity.y);
 
         if (Mathf.Abs(_horizontal) == 0)
         {
-            Vector3 stopHorizontal = rb.velocity;
+            Vector3 stopHorizontal = _rb.velocity;
             stopHorizontal.x = 0;
-            rb.velocity = stopHorizontal;
+            _rb.velocity = stopHorizontal;
         }
 
-        if (grounded && !jump)
+        if (_grounded && !_jump)
         {
-            Vector3 stopVertical = rb.velocity;
+            Vector3 stopVertical = _rb.velocity;
             stopVertical.y = 0;
-            rb.velocity = stopVertical;
-        } else if (jump)
+            _rb.velocity = stopVertical;
+        } else if (_jump)
         {
-            rb.AddForce(new Vector2(0f, jumpForce));
-            jump = false;
+            _rb.AddForce(new Vector2(0f, jumpForce));
+            _jump = false;
         }
 
 
-        anim.SetFloat("Speed", Mathf.Abs(_horizontal));
-        anim.SetFloat("HorizontalVelocity", Mathf.Abs( rb.velocity.x));
-        anim.SetFloat("VerticalVelocity", rb.velocity.y);
+        _anim.SetFloat("Speed", Mathf.Abs(_horizontal));
+        _anim.SetFloat("HorizontalVelocity", Mathf.Abs( _rb.velocity.x));
+        _anim.SetFloat("VerticalVelocity", _rb.velocity.y);
 
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Enemy"))
+        {
+            _currentHP -= 1;
+            hpText.text = _currentHP.ToString();
+            Enemy enemy = collision.gameObject.GetComponent<Enemy>();
+            enemy.DestroyEnemy();
+
+            if (_currentHP == 0)
+            {
+                SceneManager.LoadScene("Gameover");
+            }
+        }
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private IEnumerator Shoot(float waitTime)
+    {
+        if (_canShoot)
+        {
+            _canShoot = false;
+
+            GameObject blt = GameObject.Instantiate(bullet) as GameObject;
+            blt.transform.position = transform.position;
+            Projectile projectile = blt.GetComponent<Projectile>();
+            int direction = _flip ? -1 : 1;
+            projectile.Shoot(direction * bulletSpeed);
+
+            _audio.Play(0);
+
+            yield return new WaitForSeconds(waitTime);
+
+            
+
+            _canShoot = true;
+
+        }
     }
 
     #endregion
@@ -123,7 +190,7 @@ public class PlayerController : MonoBehaviour
 
     public float GetPlayerVelocity()
     {
-        return rb.velocity.x;
+        return _rb.velocity.x;
     }
 
     #endregion

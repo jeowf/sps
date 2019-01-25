@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class PauseSystem : MonoBehaviour
 {
@@ -32,5 +33,10 @@ public class PauseSystem : MonoBehaviour
 
 
         }
+    }
+
+    public void BackToTittleScreen()
+    {
+        SceneManager.LoadScene("Title Screen");
     }
 }
